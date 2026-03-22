@@ -110,6 +110,31 @@ class Database:
                 ),
             )
 
+    def insert_imported_image(self, user_id, title, url, display_url=None, delete_url=None, mime=None, size_bytes=None):
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO images (
+                    user_id, title, source_path, imgbb_id, url, display_url, delete_url,
+                    mime, size_bytes, width, height, uploaded_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                """,
+                (
+                    user_id,
+                    title,
+                    "",
+                    "",
+                    url,
+                    display_url or url,
+                    delete_url,
+                    mime,
+                    self._to_int(size_bytes),
+                    None,
+                    None,
+                ),
+            )
+
     def delete_images(self, user_id, image_ids):
         if not image_ids:
             return
@@ -552,6 +577,7 @@ class ImgBBDesktopApp:
 
         self.bulk_toolbar = tk.Frame(top, bg=BG)
         self.bulk_toolbar.pack(side=tk.RIGHT)
+        tk.Button(self.bulk_toolbar, text="Import URL", bg=SURFACE_MUTED, fg=TEXT, relief=tk.FLAT, padx=10, pady=7, command=self.open_import_modal).pack(side=tk.LEFT, padx=(0, 6))
         tk.Button(self.bulk_toolbar, text="Copy URLs", bg=SURFACE_MUTED, fg=TEXT, relief=tk.FLAT, padx=10, pady=7, command=self.copy_selected_urls).pack(side=tk.LEFT, padx=(0, 6))
         tk.Button(self.bulk_toolbar, text="Download", bg=SURFACE_MUTED, fg=TEXT, relief=tk.FLAT, padx=10, pady=7, command=self.download_selected).pack(side=tk.LEFT, padx=(0, 6))
         tk.Button(self.bulk_toolbar, text="Delete", bg="#FEE2E2", fg=DANGER, relief=tk.FLAT, padx=10, pady=7, command=self.delete_selected).pack(side=tk.LEFT)
@@ -1043,7 +1069,7 @@ class ImgBBDesktopApp:
     def _render_table(self, rows):
         self.library_tree.delete(*self.library_tree.get_children())
         if not rows:
-            self.library_tree.insert("", tk.END, values=("", "", "No images yet", "", "", ""))
+            self.library_tree.insert("", tk.END, values=("", "", "No images yet. Upload or use Import URL.", "", "", ""))
             return
         for row in rows:
             self.library_tree.insert(
@@ -1285,6 +1311,102 @@ class ImgBBDesktopApp:
                     row["created_at"],
                 ),
             )
+
+    def open_import_modal(self):
+        if not self._require_login():
+            return
+
+        modal = tk.Toplevel(self.root)
+        modal.title("Import Existing ImgBB URL")
+        modal.geometry("560x360")
+        modal.configure(bg=SURFACE)
+        modal.transient(self.root)
+        modal.grab_set()
+
+        tk.Label(modal, text="Import Existing ImgBB Image", bg=SURFACE, fg=TEXT, font=("Segoe UI", 13, "bold")).pack(anchor="w", padx=16, pady=(14, 4))
+        tk.Label(
+            modal,
+            text="ImgBB API does not list your account gallery via upload key. Paste image URL(s) to manage them here.",
+            bg=SURFACE,
+            fg=TEXT_MUTED,
+            font=("Segoe UI", 9),
+            wraplength=520,
+            justify=tk.LEFT,
+        ).pack(anchor="w", padx=16, pady=(0, 12))
+
+        tk.Label(modal, text="URLs (one per line)", bg=SURFACE, fg=TEXT, font=("Segoe UI", 10)).pack(anchor="w", padx=16)
+        url_box = tk.Text(modal, height=8, bg=SURFACE_MUTED, fg=TEXT, relief=tk.FLAT)
+        url_box.pack(fill=tk.BOTH, expand=True, padx=16, pady=(4, 10))
+
+        tk.Label(modal, text="Optional title prefix", bg=SURFACE, fg=TEXT, font=("Segoe UI", 10)).pack(anchor="w", padx=16)
+        title_var = tk.StringVar(value="Imported")
+        title_entry = tk.Entry(modal, textvariable=title_var, bg=SURFACE_MUTED, fg=TEXT, relief=tk.FLAT)
+        title_entry.pack(fill=tk.X, padx=16, pady=(4, 12), ipady=7)
+
+        actions = tk.Frame(modal, bg=SURFACE)
+        actions.pack(fill=tk.X, padx=16, pady=(0, 14))
+        tk.Button(actions, text="Cancel", bg=SURFACE_MUTED, fg=TEXT, relief=tk.FLAT, padx=12, pady=8, command=modal.destroy).pack(side=tk.RIGHT)
+        tk.Button(
+            actions,
+            text="Import",
+            bg=PRIMARY,
+            fg="#FFFFFF",
+            relief=tk.FLAT,
+            padx=12,
+            pady=8,
+            command=lambda: self._submit_import_urls(url_box, title_var.get().strip(), modal),
+        ).pack(side=tk.RIGHT, padx=(0, 8))
+
+    def _submit_import_urls(self, url_box, title_prefix, modal):
+        raw = url_box.get("1.0", tk.END).strip()
+        if not raw:
+            self.toast.show("Please provide at least one URL", "error")
+            return
+
+        lines = [line.strip() for line in raw.splitlines() if line.strip()]
+        valid_urls = []
+        for url in lines:
+            normalized = self._normalize_imgbb_url(url)
+            if normalized:
+                valid_urls.append(normalized)
+
+        if not valid_urls:
+            self.toast.show("No valid ImgBB image URLs detected", "error")
+            return
+
+        imported = 0
+        for index, url in enumerate(valid_urls, start=1):
+            title = f"{title_prefix or 'Imported'} {index}"
+            self.db.insert_imported_image(
+                self.current_user["id"],
+                title,
+                url,
+                display_url=url,
+                delete_url=None,
+                mime=None,
+                size_bytes=None,
+            )
+            imported += 1
+
+        self.db.log_activity(self.current_user["id"], "IMPORT", title_prefix or "Imported", f"Imported {imported} URL(s)")
+        modal.destroy()
+        self.refresh_library()
+        self.refresh_dashboard()
+        self.refresh_history()
+        self.toast.show(f"Imported {imported} image URL(s)", "success")
+
+    @staticmethod
+    def _normalize_imgbb_url(url):
+        if not url:
+            return None
+        lowered = url.lower()
+        if lowered.startswith("https://i.ibb.co/"):
+            return url
+        if lowered.startswith("http://i.ibb.co/"):
+            return "https://" + url.split("//", 1)[1]
+        if lowered.startswith("https://ibb.co/") or lowered.startswith("http://ibb.co/"):
+            return url
+        return None
 
     def _require_login(self):
         if self.current_user:
