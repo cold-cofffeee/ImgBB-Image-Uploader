@@ -82,6 +82,20 @@ def create_db(db_path=DB_PATH):
         """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS activity_logs (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            image_title TEXT,
+            details TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
     legacy_columns = {
         "title": "TEXT",
         "source_path": "TEXT",
