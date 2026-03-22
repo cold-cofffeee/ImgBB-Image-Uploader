@@ -1,159 +1,133 @@
 # ImgBB Desktop Manager
 
-A production-style desktop image management tool built with Python + Tkinter for complete ImgBB workflow management:
+Professional desktop image manager for ImgBB, built with Python + Tkinter.
+
+The app provides end-to-end workflow from a native-feeling desktop UI:
 
 - User authentication (register/login/logout)
-- Upload images to ImgBB
-- Browse upload history
-- Copy/open hosted URLs
-- Download hosted images locally
-- Delete records locally and optionally delete from ImgBB
+- API key connection (environment or session mode)
+- Background upload queue with retry
+- Library table/grid view with bulk actions
+- Import existing ImgBB URLs into local library
+- History timeline for activity logs
 
-This project is designed as a secure, GitHub-ready desktop app with no hardcoded secrets.
+## Features
 
----
+### Enterprise-style desktop UI
+- Fixed left sidebar navigation (Dashboard, Upload, Library, History, Settings)
+- Minimal top header with page title, search, and API status
+- Dynamic main content panels
+- Toast notifications and destructive confirmation dialogs
+- Startup in maximized mode
 
-## 1) Project Goals
+### Authentication and security
+- Local account system with secure password hashing (`PBKDF2-HMAC-SHA256`, salted)
+- Legacy SHA256 hash compatibility for older records
+- API key is not hardcoded in source
+- API key can be sourced from `IMGBB_API_KEY` env var or session entry in Settings
 
-This application was built to provide **full image lifecycle management from desktop UI**, not just upload:
+### Upload management
+- Upload via ImgBB API v1 (`POST` + multipart form)
+- Optional expiration support (`60` to `15552000` seconds)
+- Queue-based non-blocking uploads (threaded worker)
+- Per-file status/progress and retry failed uploads
+- File size guard (`<= 32 MB`)
 
-1. Authenticate users locally
-2. Accept ImgBB API key securely at runtime (session/env)
-3. Upload images with optional expiration
-4. Persist upload metadata in SQLite
-5. Allow download/open/copy/delete actions from a library view
-6. Keep repository safe for public publishing
+### Library management
+- Table and grid views
+- Multi-select actions: copy URLs, download, delete
+- Right-click context menu
+- Right-side preview panel with metadata
+- Search/filter in library view
+- Import existing ImgBB URLs (manual account-library sync)
 
----
+### History and analytics
+- Activity history (`LOGIN`, `LOGOUT`, `UPLOAD`, `DELETE`, `IMPORT`)
+- Dashboard cards for total uploads, storage used, recent uploads (7 days)
 
-## 2) Core Features
+## Important ImgBB API Limitation
 
-### Authentication
-- Register new users
-- Login with password verification
-- Logout and clear session state
+ImgBB API upload keys do not provide a direct endpoint to fetch/list all images from your ImgBB account gallery.
 
-### ImgBB Integration
-- Uses ImgBB API v1 upload endpoint
-- Upload through `POST` + `multipart/form-data`
-- Supports optional upload expiration (`60` to `15552000` seconds)
+Because of this, the app library shows:
+1. images uploaded through this app, and
+2. images manually imported through **Library → Import URL**.
 
-### Image Management
-- Local upload history table (per user)
-- Open selected image URL in browser
-- Copy one/multiple selected URLs
-- Download selected images to chosen folder
-- Delete local records and optionally call ImgBB `delete_url`
+If you already have images in your ImgBB account, use **Import URL** to bring them into the local app library.
 
-### Security-focused behavior
-- No hardcoded API key in source
-- API key not persisted to project files/DB
-- Supports `IMGBB_API_KEY` environment variable
-- Input validation for username/password/API key
-- File size guard for ImgBB max limit (32 MB)
-- Download filename sanitization
+## Tech Stack
 
----
+- Python 3.10+
+- Tkinter / ttk
+- SQLite (`images.db`)
+- Requests (`requests`)
 
-## 3) Tech Stack
+## Project Structure
 
-- **Language:** Python 3.10+
-- **UI:** Tkinter + ttk
-- **Database:** SQLite (`images.db`)
-- **HTTP client:** `requests`
-- **OS:** Works on Windows (current target), portable to other OS with Python/Tkinter support
+```text
+ImgBB-Image-Uploader/
+├─ desktop_app.py      # Main application (UI + services + interactions)
+├─ create_db.py        # Schema creation and migration helpers
+├─ requirements.txt    # Dependencies
+├─ .gitignore          # Ignore local/sensitive artifacts
+└─ README.md
+```
 
----
+## Setup (No Virtual Environment Required)
 
-## 4) Architecture & Design
+1. Install dependencies:
 
-The app follows a simple layered design:
+```bash
+py -m pip install -r requirements.txt
+```
 
-### UI Layer
-Implemented in `ImgBBDesktopApp` class inside `desktop_app.py`.
+2. Optional: set environment API key:
 
-- Multi-tab interface: Authentication, Upload, Library, Settings
-- Responsible for user interaction, feedback, and screen state
+```powershell
+setx IMGBB_API_KEY "YOUR_IMGBB_API_KEY"
+```
 
-### Data Layer
-Implemented by `Database` class in `desktop_app.py` and schema/migration helpers in `create_db.py`.
+3. Run:
 
-- Creates and migrates SQLite schema safely
-- Stores users and image metadata
-- Uses parameterized SQL queries
+```bash
+py desktop_app.py
+```
 
-### Service Layer
-Implemented by `ImgBBService` class in `desktop_app.py`.
+## Usage
 
-- Upload requests to ImgBB
-- Remote deletion call via `delete_url`
-- File download from hosted URL
+1. Launch app (opens maximized)
+2. Login/Register from sidebar profile card
+3. Go to **Settings** and connect API key:
+   - Enable environment mode, or
+   - Apply session key manually
+4. Go to **Upload**:
+   - Add files
+   - Choose expiration
+   - Start upload queue
+   - Retry failures if needed
+5. Go to **Library**:
+   - Manage uploaded/imported records
+   - Copy URLs, download, delete
+   - Use **Import URL** for existing ImgBB images
+6. Go to **History** for activity tracking
 
----
-
-## 5) Methods and Practices Used
-
-### Password handling
-- Passwords are not stored in plain text
-- Uses PBKDF2-HMAC-SHA256 with random salt (`120000` iterations)
-- Legacy SHA256 hashes are supported for backward compatibility migration
-- Constant-time comparison via `hmac.compare_digest`
-
-### Database migration strategy
-- `create_db.py` creates required tables if missing
-- Adds missing legacy columns when old DB versions exist
-- Preserves old data where possible
-- Clears any legacy API-key DB values to reduce secret persistence risk
-
-### Defensive coding
-- Parameterized DB writes
-- Request timeout enforcement
-- Upload failure aggregation with user-visible warnings
-- Guard clauses for invalid states (not logged in, no files selected, invalid expiration)
-
----
-
-## 6) ImgBB API Details Used
-
-### Endpoint
-`https://api.imgbb.com/1/upload`
-
-### Request method
-`POST`
-
-### Parameters
-- `key` (required): API key
-- `image` (required): binary image file
-- `expiration` (optional): delete-after seconds (`60` to `15552000`)
-
-### Response usage
-The app stores:
-- `id`
-- `title`
-- `url`
-- `display_url`
-- `delete_url`
-- image metadata (`mime`, size, width, height)
-
----
-
-## 7) Database Schema
+## Database Schema (Current)
 
 Database file: `images.db`
 
-### `users`
+### users
 - `id` (PK)
 - `username` (unique)
 - `password_hash`
 - `created_at`
 
-### `user_settings`
-- `user_id` (PK, FK to users)
+### user_settings
+- `user_id` (PK/FK)
 - `updated_at`
 
-### `images`
+### images
 - `id` (PK)
-- `user_id` (FK to users)
+- `user_id` (FK)
 - `title`
 - `source_path`
 - `imgbb_id`
@@ -166,124 +140,42 @@ Database file: `images.db`
 - `height`
 - `uploaded_at`
 
----
+### activity_logs
+- `id` (PK)
+- `user_id` (FK)
+- `action`
+- `image_title`
+- `details`
+- `created_at`
 
-## 8) Project Structure
+## Keyboard Shortcuts
 
-```text
-ImgBB-Image-Uploader/
-├─ desktop_app.py      # Main desktop app (UI + DB access + API service)
-├─ create_db.py        # Schema creation and migration helpers
-├─ requirements.txt    # Python dependencies
-├─ .gitignore          # Prevents committing local/sensitive artifacts
-└─ README.md           # Documentation
-```
+- `Ctrl+U` → Open Upload page and select files
+- `Ctrl+C` → Copy selected URL(s) in Library page
 
----
+## Security Checklist Before GitHub Push
 
-## 9) Setup & Run (No Virtual Environment Required)
+- Do not commit `images.db`, `.env`, `.vscode`, or caches
+- Keep API keys out of source and committed files
+- Rotate ImgBB API key if exposed
 
-> This project can run directly with your system Python.
+## Troubleshooting
 
-1. Install dependencies:
+### Library shows empty but account has images
+Use **Library → Import URL**. This is expected due to ImgBB API listing limitations for upload keys.
 
-```bash
-py -m pip install -r requirements.txt
-```
-
-2. (Optional but recommended) set API key as environment variable:
-
-```powershell
-setx IMGBB_API_KEY "YOUR_IMGBB_API_KEY"
-```
-
-3. Start app:
-
-```bash
-py desktop_app.py
-```
-
----
-
-## 10) How to Use
-
-1. Open app
-2. Register with username/password
-3. Login
-4. Go to **Settings**:
-   - Paste API key for session use, or
-   - rely on `IMGBB_API_KEY` from environment
-5. Go to **Upload**:
-   - Select images
-   - Optional expiration
-   - Upload
-6. Go to **Library** to:
-   - Refresh records
-   - Open URL
-   - Copy URL(s)
-   - Download selected images
-   - Delete local records (and optionally remote ImgBB images)
-
----
-
-## 11) Security Notes
-
-### What is protected
-- No API keys in source code
-- No API keys written into SQLite by current implementation
-- Sensitive/generated files excluded via `.gitignore`
-
-### Before pushing to GitHub
-- Confirm `.gitignore` is present
-- Ensure `images.db` is not tracked
-- Ensure no `.env` or secrets are committed
-- Rotate key immediately if it was exposed anywhere
-
-### Current limitations
-- Local auth DB is app-level (not enterprise IAM)
-- Deletion via `delete_url` depends on ImgBB endpoint behavior
-
----
-
-## 12) Error Handling & Validation
-
-- Upload expiration validated in allowed range
-- Oversized files (>32 MB) are rejected before upload
-- Network failures are captured and shown as warnings
-- App keeps processing remaining files if one upload fails
-
----
-
-## 13) Troubleshooting
-
-### `Import "requests" could not be resolved`
-Install dependencies with:
-
-```bash
-py -m pip install -r requirements.txt
-```
-
-### Login fails for legacy users
-Legacy hash compatibility exists, but if old DB is inconsistent, delete `images.db` and start clean (if data retention is not required).
-
-### Upload fails with API error
-- Verify key is valid
-- Confirm image size <= 32 MB
+### Upload fails
+- Confirm API key is valid
+- Confirm file size is `<= 32 MB`
 - Check network connectivity
 
----
+### `Import "requests" could not be resolved`
 
-## 14) Future Enhancements
+```bash
+py -m pip install -r requirements.txt
+```
 
-- Add secure OS keyring integration (optional mode)
-- Add background upload queue with progress bars
-- Add search/filter/sort in library view
-- Add image thumbnail previews
-- Package as Windows `.exe` installer
+## License
 
----
-
-## 15) License
-
-Use your preferred license file (MIT recommended) when publishing publicly.
+Add your preferred license (MIT recommended) before public release.
 
