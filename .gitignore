@@ -1,0 +1,28 @@
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Local database and secrets
+images.db
+*.db
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# IDE/editor local state
+.vscode/
+.idea/
+
+# Build/distribution
+build/
+dist/
+*.spec
+
+# OS files
+.DS_Store
+Thumbs.db
