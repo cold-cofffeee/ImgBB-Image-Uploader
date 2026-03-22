@@ -255,7 +255,7 @@ class ImgBBDesktopApp:
     def __init__(self, root):
         self.root = root
         self.root.title("ImgBB Desktop Manager")
-        self.root.geometry("1320x820")
+        self.root.state("zoomed")
         self.root.minsize(1080, 700)
         self.root.configure(bg=BG)
 
