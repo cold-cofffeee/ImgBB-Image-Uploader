@@ -333,38 +333,53 @@ class ImgBBDesktopApp:
     def _build_sidebar(self):
         logo = tk.Frame(self.sidebar, bg=SURFACE)
         logo.pack(fill=tk.X, padx=16, pady=(16, 8))
-        tk.Label(logo, text="🖼️ ImgBB", bg=SURFACE, fg=TEXT, font=("Segoe UI", 14, "bold")).pack(anchor="w")
-        tk.Label(logo, text="Desktop Manager", bg=SURFACE, fg=TEXT_MUTED, font=("Segoe UI", 9)).pack(anchor="w")
+        logo_row = tk.Frame(logo, bg=SURFACE)
+        logo_row.pack(anchor="w")
+        tk.Label(logo_row, text="\uE91B", bg=SURFACE, fg=PRIMARY, font=("Segoe MDL2 Assets", 13), width=2, anchor="w").pack(side=tk.LEFT)
+        tk.Label(logo_row, text="ImgBB", bg=SURFACE, fg=TEXT, font=("Segoe UI", 16, "bold")).pack(side=tk.LEFT)
+        tk.Label(logo, text="Desktop Manager", bg=SURFACE, fg=TEXT_MUTED, font=("Segoe UI", 9)).pack(anchor="w", padx=(2, 0), pady=(2, 0))
 
-        self.nav_buttons = {}
+        self.nav_items = {}
         nav = [
-            ("Dashboard", "📊"),
-            ("Upload", "⬆️"),
-            ("Library", "🗂️"),
-            ("History", "🕒"),
-            ("Settings", "⚙️"),
+            ("Dashboard", "\uE9D2"),
+            ("Upload", "\uE898"),
+            ("Library", "\uE8B7"),
+            ("History", "\uE81C"),
+            ("Settings", "\uE713"),
         ]
         nav_container = tk.Frame(self.sidebar, bg=SURFACE)
         nav_container.pack(fill=tk.X, padx=10, pady=8)
 
         for name, icon in nav:
-            button = tk.Button(
-                nav_container,
-                text=f"{icon}  {name}",
-                relief=tk.FLAT,
-                bd=0,
-                anchor="w",
+            row = tk.Frame(nav_container, bg=SURFACE, height=38)
+            row.pack(fill=tk.X, pady=3)
+            row.pack_propagate(False)
+
+            icon_label = tk.Label(
+                row,
+                text=icon,
+                bg=SURFACE,
+                fg=TEXT_MUTED,
+                font=("Segoe MDL2 Assets", 12),
+                width=3,
+                anchor="center",
+            )
+            icon_label.pack(side=tk.LEFT, padx=(8, 2), fill=tk.Y)
+
+            text_label = tk.Label(
+                row,
+                text=name,
                 bg=SURFACE,
                 fg=TEXT,
-                activebackground="#EEF2FF",
-                activeforeground=TEXT,
-                font=("Segoe UI", 10),
-                padx=12,
-                pady=9,
-                command=lambda n=name: self.switch_page(n),
+                font=("Segoe UI", 11),
+                anchor="w",
             )
-            button.pack(fill=tk.X, pady=3)
-            self.nav_buttons[name] = button
+            text_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            for widget in (row, icon_label, text_label):
+                widget.bind("<Button-1>", lambda _e, n=name: self.switch_page(n))
+
+            self.nav_items[name] = (row, icon_label, text_label)
 
         spacer = tk.Frame(self.sidebar, bg=SURFACE)
         spacer.pack(fill=tk.BOTH, expand=True)
@@ -711,11 +726,16 @@ class ImgBBDesktopApp:
             self._refresh_api_status()
 
     def _highlight_nav(self, active):
-        for name, button in self.nav_buttons.items():
+        for name, widgets in self.nav_items.items():
+            row, icon_label, text_label = widgets
             if name == active:
-                button.configure(bg="#DBEAFE", fg="#1E3A8A")
+                row.configure(bg="#DBEAFE")
+                icon_label.configure(bg="#DBEAFE", fg="#1E3A8A")
+                text_label.configure(bg="#DBEAFE", fg="#1E3A8A")
             else:
-                button.configure(bg=SURFACE, fg=TEXT)
+                row.configure(bg=SURFACE)
+                icon_label.configure(bg=SURFACE, fg=TEXT_MUTED)
+                text_label.configure(bg=SURFACE, fg=TEXT)
 
     def _set_search_visibility(self, page_name):
         if page_name == "Library":
